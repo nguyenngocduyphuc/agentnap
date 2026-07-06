@@ -39,6 +39,9 @@ from pathlib import Path
 # ponytail: stdlib only — no psutil. `ps` / PowerShell CIM are the truth.
 
 IS_WIN = platform.system() == "Windows"
+if IS_WIN:  # legacy consoles default to cp1252 and choke on ✓/emoji
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 DEFAULT_CONFIG = {
     # substring patterns that mark a process as an AI-agent process
