@@ -18,27 +18,39 @@ and the fans are on. You are not alone:
 ## What AgentNap does
 
 ```
-$ agentnap status
-AgentNap — memory pressure: WARNING
+$ agentnap advise
+🩺 AgentNap Advisor — 14:22
 
-AGENT                        PROCS  ORPHANS       RSS
-claude                          14        6     9482M
-chrome-devtools-mcp             30       12     3105M
-mcp-server-playwright           12        4     1920M
+Memory pressure: WARNING 🟡   swap: 22.3 GB   agent RAM: 8.6 GB
 
-$ agentnap reap --apply
-  reap: pid=23926 rss=996MB age=340m  claude --resume ...
-Reclaimed ~4210 MB from 11 orphan(s).
+Safe now (zero disruption — these are already dead):
+  ✓ Reclaim ~2100 MB from 6 orphaned process(es)  →  agentnap reap --apply
+
+Advisory (your call — may interrupt a session you still want):
+  • claude pid=52942 holds 223 MB, idle 89h+ — close its tab, or
+    `agentnap nap 52942` (reversible)
+
+AgentNap never kills active work. Automatic = orphans only; the rest is advice.
 ```
 
-- **`status`** — live per-agent RAM attribution: who is eating what.
+- **`advise`** — plain-language diagnosis: what's eating RAM, what's safe to
+  reclaim right now, and what's *your* call. For people who know they have a
+  problem, not a process tree.
+- **`status`** — live per-agent RAM attribution table.
 - **`reap`** — kills *only* orphaned (PPID=1) agent processes, gracefully
   (SIGTERM → 8 s grace → SIGKILL). Dry-run by default.
-- **`daemon`** — background watchdog that reaps automatically, but *only when
-  macOS reports elevated memory pressure* — no busy polling, no cleaning for
-  cleaning's sake.
+- **`daemon`** — background watchdog. When macOS reports elevated memory
+  pressure it auto-reaps orphans (the only automatic action) and sends one
+  native notification with advice — max one per 30 min, no nagging.
 - **`nap` / `wake`** — SIGSTOP an idle agent so macOS can compress/swap its
   pages, SIGCONT to resume. Fully reversible. (experimental)
+
+**The non-disruption guarantee:** the only thing AgentNap ever does on its own
+is remove processes whose parent is already dead. Anything that could touch a
+live session is surfaced as advice and left to you.
+
+New to the problem? Read the [AI-Agent RAM Playbook](PLAYBOOK.md) — five
+habits that prevent the mess in the first place.
 
 ## Why it's safe
 
@@ -82,6 +94,9 @@ The CLI stays free and MIT. **Pro** is a native menu-bar app:
 - weekly "RAM saved" report
 
 Join the waitlist: *(link)*
+
+**Windows?** The same leak exists there (WSL2 + node MCP servers). Windows
+support is on the Pro roadmap — tell us on the waitlist if you need it first.
 
 ## License
 

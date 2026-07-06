@@ -12,11 +12,15 @@ Safe by design:
 
 Usage:
   agentnap status            # per-agent RAM attribution table
+  agentnap advise            # plain-language diagnosis + ranked advice
   agentnap reap              # show what would be reaped (dry-run)
   agentnap reap --apply      # actually reap orphans
-  agentnap daemon            # loop: reap when memory pressure is elevated
+  agentnap daemon            # loop: reap orphans + advise on memory pressure
   agentnap nap <pid>         # SIGSTOP an idle agent (experimental)
   agentnap wake <pid>        # SIGCONT it back
+
+Guarantee: AgentNap never kills active work. Automatic action is limited to
+orphans (parent already dead). Everything else is advice, decided by you.
 """
 
 import json
@@ -44,6 +48,8 @@ DEFAULT_CONFIG = {
     "daemon_interval": 60,       # seconds between daemon scans
     # daemon reaps only when pressure >= this level (1=normal 2=warn 4=critical)
     "daemon_pressure_level": 2,
+    "idle_hours": 2,             # advise about agents idle longer than this
+    "notify_cooldown_minutes": 30,
 }
 
 CONFIG_PATH = Path.home() / ".config" / "agentnap" / "config.json"
@@ -57,20 +63,21 @@ def load_config() -> dict:
 
 
 def ps_snapshot() -> list[dict]:
-    """All user processes: pid, ppid, pgid, rss_mb, etime_s, command."""
+    """All user processes: pid, ppid, pgid, rss_mb, cpu%, etime_s, command."""
     out = subprocess.run(
-        ["ps", "-axo", "pid=,ppid=,pgid=,rss=,etime=,command="],
+        ["ps", "-axo", "pid=,ppid=,pgid=,rss=,%cpu=,etime=,command="],
         capture_output=True, text=True, check=True,
     ).stdout
     procs = []
     for line in out.splitlines():
-        parts = line.split(None, 5)
-        if len(parts) < 6:
+        parts = line.split(None, 6)
+        if len(parts) < 7:
             continue
-        pid, ppid, pgid, rss_kb, etime, command = parts
+        pid, ppid, pgid, rss_kb, pcpu, etime, command = parts
         procs.append({
             "pid": int(pid), "ppid": int(ppid), "pgid": int(pgid),
             "rss_mb": int(rss_kb) / 1024,
+            "pcpu": float(pcpu.replace(",", ".")),
             "age_s": _parse_etime(etime),
             "command": command,
         })
@@ -100,6 +107,89 @@ def memory_pressure_level() -> int:
         return int(out)
     except (subprocess.CalledProcessError, ValueError):
         return 1
+
+
+def swap_used_gb() -> float:
+    try:
+        out = subprocess.run(
+            ["sysctl", "-n", "vm.swapusage"],
+            capture_output=True, text=True, check=True,
+        ).stdout  # "total = 24576.00M  used = 23601.69M  free = ..."
+        used = out.split("used =")[1].split("M")[0].strip().replace(",", ".")
+        return float(used) / 1024
+    except (subprocess.CalledProcessError, IndexError, ValueError):
+        return 0.0
+
+
+def notify(message: str) -> None:
+    """Native macOS notification. ponytail: osascript, no frameworks."""
+    subprocess.run(
+        ["osascript", "-e",
+         f'display notification "{message}" with title "AgentNap 😴"'],
+        capture_output=True,
+    )
+
+
+def find_idle(agents: list[dict], cfg: dict) -> list[dict]:
+    """Long-running agents with ~zero CPU: nap/close candidates. Advice only."""
+    min_age = cfg["idle_hours"] * 3600
+    return [
+        p for p in agents
+        if p["ppid"] != 1                      # orphans handled by reap
+        and p["age_s"] >= min_age
+        and p["pcpu"] < 0.5
+        and p["rss_mb"] >= cfg["min_rss_mb"]
+        and ".app/Contents/" not in p["command"]
+    ]
+
+
+def build_advice(cfg: dict) -> tuple[str, str]:
+    """Returns (full_report, one_line_summary) in plain language."""
+    agents = match_agents(ps_snapshot(), cfg)
+    orphans = find_orphans(cfg)
+    idle = find_idle(agents, cfg)
+    level = memory_pressure_level()
+    level_txt = {1: "normal ✅", 2: "WARNING 🟡", 4: "CRITICAL 🔴"}.get(
+        level, "?")
+    swap = swap_used_gb()
+    total = sum(p["rss_mb"] for p in agents)
+
+    lines = [f"🩺 AgentNap Advisor — {time.strftime('%H:%M')}", ""]
+    lines.append(f"Memory pressure: {level_txt}   "
+                 f"swap: {swap:.1f} GB   agent RAM: {total / 1024:.1f} GB")
+    lines.append("")
+
+    orphan_mb = sum(p["rss_mb"] for p in orphans)
+    if orphans:
+        lines.append(f"Safe now (zero disruption — these are already dead):")
+        lines.append(f"  ✓ Reclaim ~{orphan_mb:.0f} MB from {len(orphans)} "
+                     f"orphaned process(es)  →  agentnap reap --apply")
+    else:
+        lines.append("No orphaned agent processes — nothing to auto-clean.")
+    lines.append("")
+
+    if idle:
+        lines.append("Advisory (your call — may interrupt a session you "
+                     "still want):")
+        for p in sorted(idle, key=lambda x: -x["rss_mb"])[:5]:
+            name = os.path.basename(p["command"].split()[0])
+            lines.append(f"  • {name} pid={p['pid']} holds "
+                         f"{p['rss_mb']:.0f} MB, idle {p['age_s'] // 3600}h+ "
+                         f"— close its tab, or `agentnap nap {p['pid']}` "
+                         f"(reversible)")
+        lines.append("")
+
+    if level >= 2 and not orphans and not idle:
+        lines.append("Pressure is elevated but agents look healthy — the "
+                     "RAM is in active apps. Closing unused browser tabs "
+                     "or restarting the heaviest app is the next lever.")
+    lines.append("AgentNap never kills active work. Automatic = orphans "
+                 "only; the rest is advice.")
+
+    summary = (f"pressure {level_txt.split()[0]}, "
+               f"{len(orphans)} orphans (~{orphan_mb:.0f}MB reclaimable), "
+               f"{len(idle)} idle agents")
+    return "\n".join(lines), summary
 
 
 def match_agents(procs: list[dict], cfg: dict) -> list[dict]:
@@ -194,14 +284,21 @@ def cmd_status(cfg: dict) -> None:
 
 def cmd_daemon(cfg: dict) -> None:
     print(f"AgentNap daemon: scan every {cfg['daemon_interval']}s, "
-          f"reap at pressure >= {cfg['daemon_pressure_level']}")
+          f"act at pressure >= {cfg['daemon_pressure_level']}")
+    last_notify = 0.0
+    cooldown = cfg["notify_cooldown_minutes"] * 60
     while True:
         level = memory_pressure_level()
-        orphans = find_orphans(cfg)
-        if orphans and level >= cfg["daemon_pressure_level"]:
-            print(f"[{time.strftime('%H:%M:%S')}] pressure={level}, "
-                  f"reaping {len(orphans)} orphan(s)")
-            reap(orphans, cfg["grace_seconds"], apply=True)
+        if level >= cfg["daemon_pressure_level"]:
+            orphans = find_orphans(cfg)
+            if orphans:  # the only automatic action: already-dead work
+                print(f"[{time.strftime('%H:%M:%S')}] pressure={level}, "
+                      f"reaping {len(orphans)} orphan(s)")
+                reap(orphans, cfg["grace_seconds"], apply=True)
+            if time.time() - last_notify > cooldown:
+                _, summary = build_advice(cfg)
+                notify(f"RAM {summary}. Run: agentnap advise")
+                last_notify = time.time()
         time.sleep(cfg["daemon_interval"])
 
 
@@ -211,6 +308,9 @@ def main() -> None:
     cmd = args[0] if args else "status"
     if cmd == "status":
         cmd_status(cfg)
+    elif cmd == "advise":
+        report, _ = build_advice(cfg)
+        print(report)
     elif cmd == "reap":
         reap(find_orphans(cfg), cfg["grace_seconds"], apply="--apply" in args)
     elif cmd == "daemon":
