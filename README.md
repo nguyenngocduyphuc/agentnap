@@ -1,5 +1,10 @@
 # AgentNap 😴
 
+[![tests](https://github.com/nguyenngocduyphuc/agentnap/actions/workflows/test.yml/badge.svg)](https://github.com/nguyenngocduyphuc/agentnap/actions/workflows/test.yml)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+![platform](https://img.shields.io/badge/platform-macOS-blue)
+![deps](https://img.shields.io/badge/dependencies-zero-brightgreen)
+
 **App Nap for your AI agents.** Reclaim the gigabytes of RAM that Claude Code,
 Codex, Cursor, MCP servers, and headless Chrome quietly leak on your Mac.
 
