@@ -57,9 +57,14 @@ AgentNap never kills active work. Automatic = orphans only; the rest is advice.
   Your process data goes only to the endpoint you chose; without a key,
   everything works fully offline.
 
-**The non-disruption guarantee:** the only thing AgentNap ever does on its own
-is remove processes whose parent is already dead. Anything that could touch a
-live session is surfaced as advice and left to you.
+**The non-disruption guarantee (precise version):** the only automatic action
+is reaping *orphaned agent processes* — parent exited, matches an agent
+pattern, idle-CPU, older than 5 minutes, and not a GUI app (verified via
+LaunchServices, not path guessing). A `nohup`'d script that is orphaned but
+*busy* is deliberately spared and only mentioned in `advise`. Anything that
+could touch a live session is surfaced as advice and left to you.
+Independently audited — see [`evidence/`](evidence/) for the safety audit and
+a repeatable verification experiment.
 
 New to the problem? Read the [AI-Agent RAM Playbook](PLAYBOOK.md) — five
 habits that prevent the mess in the first place.

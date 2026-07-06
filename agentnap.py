@@ -41,10 +41,14 @@ DEFAULT_CONFIG = {
         "serena", "browsermcp", "puppeteer",
     ],
     # never touch, even if matched (active infra, user's own tools)
-    "protect_patterns": ["agentnap", "Activity Monitor", "loginwindow"],
+    "protect_patterns": ["agentnap", "Activity Monitor", "loginwindow",
+                         "tmux", "sshd", "Visual Studio Code", "iTerm"],
     "grace_seconds": 8,          # SIGTERM -> SIGKILL wait
     "min_age_seconds": 300,      # orphan must be this old before reaping
     "min_rss_mb": 50,            # ignore tiny processes
+    # an orphan that is BUSY is probably nohup'd real work, not a leak:
+    # never auto-reap it, only mention it in advise
+    "orphan_max_cpu": 10.0,
     "daemon_interval": 60,       # seconds between daemon scans
     # daemon reaps only when pressure >= this level (1=normal 2=warn 4=critical)
     "daemon_pressure_level": 2,
@@ -134,6 +138,17 @@ def notify(message: str) -> None:
     )
 
 
+def is_gui_app(pid: int) -> bool:
+    """Ask LaunchServices whether pid is a real GUI app (never reap those).
+    A substring test on '.app' is wrong: every framework Python on macOS
+    runs as .../Python.app/Contents/MacOS/Python yet is a CLI process."""
+    out = subprocess.run(
+        ["lsappinfo", "info", "-only", "bundleid", str(pid)],
+        capture_output=True, text=True,
+    ).stdout
+    return '"CFBundleIdentifier"="' in out
+
+
 def find_idle(agents: list[dict], cfg: dict) -> list[dict]:
     """Long-running agents with ~zero CPU: nap/close candidates. Advice only."""
     min_age = cfg["idle_hours"] * 3600
@@ -143,7 +158,7 @@ def find_idle(agents: list[dict], cfg: dict) -> list[dict]:
         and p["age_s"] >= min_age
         and p["pcpu"] < 0.5
         and p["rss_mb"] >= cfg["min_rss_mb"]
-        and ".app/Contents/" not in p["command"]
+        and not is_gui_app(p["pid"])
     ]
 
 
@@ -258,15 +273,17 @@ def match_agents(procs: list[dict], cfg: dict) -> list[dict]:
     return hits
 
 
-def find_orphans(cfg: dict) -> list[dict]:
-    agents = match_agents(ps_snapshot(), cfg)
+def find_orphans(cfg: dict, procs: list[dict] | None = None) -> list[dict]:
+    agents = match_agents(procs if procs is not None else ps_snapshot(), cfg)
     return [
         p for p in agents
         if p["ppid"] == 1
-        # macOS GUI apps are launchd children: PPID=1 does NOT mean orphan
-        and ".app/Contents/" not in p["command"]
         and p["age_s"] >= cfg["min_age_seconds"]
         and p["rss_mb"] >= cfg["min_rss_mb"]
+        # a busy orphan may be nohup'd real work (audit finding #1)
+        and p["pcpu"] <= cfg["orphan_max_cpu"]
+        # macOS GUI apps are launchd children: PPID=1 does NOT mean orphan
+        and not is_gui_app(p["pid"])
     ]
 
 

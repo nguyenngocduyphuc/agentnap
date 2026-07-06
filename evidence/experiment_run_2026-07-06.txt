@@ -1,0 +1,23 @@
+== SETUP: spawning 5 orphans + 1 active child, ~100 MB each ==
+
+== C1 DETECTION ==
+spawned orphans : 5
+detected orphans: 5  (total RSS 561 MB)
+active child pid 57579 in orphan list: False
+
+== C2 REAP ==
+  reap: pid=57568 rss=112MB age=0m  /Users/phuongnam/.homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework
+  reap: pid=57570 rss=112MB age=0m  /Users/phuongnam/.homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework
+  reap: pid=57573 rss=112MB age=0m  /Users/phuongnam/.homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework
+  reap: pid=57575 rss=112MB age=0m  /Users/phuongnam/.homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework
+  reap: pid=57578 rss=112MB age=0m  /Users/phuongnam/.homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework
+Reclaimed ~561 MB from 5 orphan(s).
+orphan survivors after reap: 0 (expect 0)
+
+== C3 NON-DISRUPTION ==
+active child alive after reap: True (expect True)
+
+== RESULT ==
+RSS held by orphans (reclaimed on kill): 561 MB
+swap before/after: 8.66 / 8.66 GB
+ALL CLAIMS VERIFIED: C1 detection ✓  C2 reap+reclaim ✓  C3 non-disruption ✓

@@ -31,6 +31,14 @@ def demo():
     ]
     assert [p["pid"] for p in agentnap.find_idle(idle_procs, cfg)] == [10]
 
+    # audit finding #1: a BUSY orphan (nohup'd real work) is never auto-reaped
+    busy_orphan = {"pid": 20, "ppid": 1, "pgid": 20, "rss_mb": 800,
+                   "age_s": 8000, "pcpu": 95.0, "command": "claude-train"}
+    lazy_orphan = {"pid": 21, "ppid": 1, "pgid": 21, "rss_mb": 800,
+                   "age_s": 8000, "pcpu": 0.0, "command": "claude-leak"}
+    got = agentnap.find_orphans(cfg, [busy_orphan, lazy_orphan])
+    assert [p["pid"] for p in got] == [21], got
+
     assert agentnap.swap_used_gb() >= 0.0
     report, summary = agentnap.build_advice(cfg)
     assert "AgentNap Advisor" in report and "orphans" in summary
