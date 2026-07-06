@@ -50,6 +50,10 @@ DEFAULT_CONFIG = {
     "daemon_pressure_level": 2,
     "idle_hours": 2,             # advise about agents idle longer than this
     "notify_cooldown_minutes": 30,
+    # optional AI advisor — any OpenAI-compatible endpoint (BYO key).
+    # key comes from env AGENTNAP_API_KEY (never stored in this file).
+    "ai_api_base": "https://api.deepseek.com",
+    "ai_model": "deepseek-chat",
 }
 
 CONFIG_PATH = Path.home() / ".config" / "agentnap" / "config.json"
@@ -192,6 +196,52 @@ def build_advice(cfg: dict) -> tuple[str, str]:
     return "\n".join(lines), summary
 
 
+def ai_advise(report: str, cfg: dict) -> str:
+    """Send the deterministic report to any OpenAI-compatible API for a
+    personalized action plan. BYO key: env AGENTNAP_API_KEY."""
+    import urllib.request  # ponytail: stdlib, no sdk
+
+    key = os.environ.get("AGENTNAP_API_KEY")
+    if not key:
+        return ("AI advisor needs an API key.\n"
+                "  export AGENTNAP_API_KEY=sk-...   # DeepSeek, OpenAI, "
+                "Groq, OpenRouter, Ollama — any OpenAI-compatible API\n"
+                "Optional in ~/.config/agentnap/config.json: "
+                '"ai_api_base", "ai_model".')
+    body = json.dumps({
+        "model": cfg["ai_model"],
+        "messages": [
+            {"role": "system", "content":
+             "You are AgentNap's advisor. The user runs AI coding agents on "
+             "a Mac and RAM is tight. Given the diagnostic report, reply "
+             "with a short prioritized action plan (max 6 bullets, plain "
+             "language). Never suggest killing active work, disabling swap, "
+             "or RAM-cleaner apps. Safe reclaims first, then advisory items "
+             "with their tradeoff."},
+            {"role": "user", "content": report},
+        ],
+        "temperature": 0.2,
+    }).encode()
+    req = urllib.request.Request(
+        cfg["ai_api_base"].rstrip("/") + "/chat/completions",
+        data=body,
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {key}"},
+    )
+    import ssl
+    try:  # some homebrew pythons ship without a CA bundle
+        import certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        ctx = ssl.create_default_context()
+    try:
+        with urllib.request.urlopen(req, timeout=60, context=ctx) as resp:
+            data = json.load(resp)
+        return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:  # network/key errors -> degrade, never crash
+        return f"AI advisor unavailable ({e}). The report above still stands."
+
+
 def match_agents(procs: list[dict], cfg: dict) -> list[dict]:
     pats = [p.lower() for p in cfg["agent_patterns"]]
     guard = [p.lower() for p in cfg["protect_patterns"]]
@@ -311,15 +361,19 @@ def main() -> None:
     elif cmd == "advise":
         report, _ = build_advice(cfg)
         print(report)
+        if "--ai" in args:
+            print("\n🤖 AI plan (" + cfg["ai_model"] + "):\n")
+            print(ai_advise(report, cfg))
     elif cmd == "reap":
         reap(find_orphans(cfg), cfg["grace_seconds"], apply="--apply" in args)
     elif cmd == "daemon":
         cmd_daemon(cfg)
     elif cmd in ("nap", "wake") and len(args) > 1:
         sig = signal.SIGSTOP if cmd == "nap" else signal.SIGCONT
-        os.kill(int(args[1]), sig)
-        print(f"{cmd}: pid {args[1]} "
-              f"({'suspended, RAM compressible' if cmd == 'nap' else 'resumed'})")
+        for pid in args[1:]:
+            os.kill(int(pid), sig)
+            print(f"{cmd}: pid {pid} "
+                  f"({'suspended, RAM compressible' if cmd == 'nap' else 'resumed'})")
     else:
         print(__doc__)
         sys.exit(1)

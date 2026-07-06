@@ -42,8 +42,20 @@ AgentNap never kills active work. Automatic = orphans only; the rest is advice.
 - **`daemon`** — background watchdog. When macOS reports elevated memory
   pressure it auto-reaps orphans (the only automatic action) and sends one
   native notification with advice — max one per 30 min, no nagging.
-- **`nap` / `wake`** — SIGSTOP an idle agent so macOS can compress/swap its
+- **`nap` / `wake`** — SIGSTOP idle agents so macOS can compress/swap their
   pages, SIGCONT to resume. Fully reversible. (experimental)
+- **`advise --ai`** — optional: sends the diagnostic report to *your* LLM for
+  a personalized plan. Bring your own key, any OpenAI-compatible API
+  (DeepSeek, OpenAI, Groq, OpenRouter, local Ollama):
+
+  ```bash
+  export AGENTNAP_API_KEY=sk-...
+  agentnap advise --ai        # default: DeepSeek (~$0.0002/call)
+  ```
+
+  Override `ai_api_base` / `ai_model` in the config for other providers.
+  Your process data goes only to the endpoint you chose; without a key,
+  everything works fully offline.
 
 **The non-disruption guarantee:** the only thing AgentNap ever does on its own
 is remove processes whose parent is already dead. Anything that could touch a
