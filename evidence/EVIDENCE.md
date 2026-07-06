@@ -20,6 +20,11 @@ work), then verifies:
 
 Captured run: [`experiment_run_2026-07-06.txt`](experiment_run_2026-07-06.txt).
 
+Since v0.4 this experiment also runs in CI on GitHub's clean `macos-latest`
+runners on every push — verification on independent infrastructure, not just
+the author's machine:
+[actions/workflows/test.yml](https://github.com/nguyenngocduyphuc/agentnap/actions/workflows/test.yml).
+
 ## Layer 3 — Independent safety audit (external model)
 
 [`safety_audit_deepseek_2026-07-06.md`](safety_audit_deepseek_2026-07-06.md)

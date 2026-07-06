@@ -115,7 +115,7 @@ The CLI stays free and MIT. **Pro** is a native menu-bar app:
 - headless-Chrome flag injection (`--js-flags=--max-old-space-size`, renderer caps)
 - weekly "RAM saved" report
 
-Join the waitlist: *(link)*
+Join the waitlist: **[👍 this issue](https://github.com/nguyenngocduyphuc/agentnap/issues/1)**
 
 **Windows?** The same leak exists there (WSL2 + node MCP servers). Windows
 support is on the Pro roadmap — tell us on the waitlist if you need it first.
