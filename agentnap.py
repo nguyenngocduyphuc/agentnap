@@ -113,8 +113,13 @@ def _ps_windows() -> list[dict]:
         capture_output=True, text=True, check=True,
     ).stdout
     now = time.time()
+    items = json.loads(out)
+    if isinstance(items, dict):   # ConvertTo-Json unwraps single-item arrays
+        items = [items]
     procs = []
-    for it in json.loads(out):
+    for it in items:
+        if not it.get("ProcessId"):   # skip PID 0 (System Idle Process)
+            continue
         cd = it.get("CreationDate") or ""   # "/Date(1751852117490)/" (ms)
         age = 0
         if "(" in cd:
