@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/nguyenngocduyphuc/agentnap/actions/workflows/test.yml/badge.svg)](https://github.com/nguyenngocduyphuc/agentnap/actions/workflows/test.yml)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-![platform](https://img.shields.io/badge/platform-macOS-blue)
+![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20beta-blue)
 ![deps](https://img.shields.io/badge/dependencies-zero-brightgreen)
 
 **App Nap for your AI agents.** Reclaim the gigabytes of RAM that Claude Code,
@@ -117,8 +117,23 @@ The CLI stays free and MIT. **Pro** is a native menu-bar app:
 
 Join the waitlist: **[👍 this issue](https://github.com/nguyenngocduyphuc/agentnap/issues/1)**
 
-**Windows?** The same leak exists there (WSL2 + node MCP servers). Windows
-support is on the Pro roadmap — tell us on the waitlist if you need it first.
+**Windows?** A beta shipped: `status` / `advise` / `reap` (+ `stats`) work
+today — orphan detection uses parent-liveness (no PID-1 reparenting on
+Windows) and reaping goes `taskkill` → grace → `taskkill /F`. The whole E2E
+experiment runs in CI on `windows-latest` on every push. The daemon and
+`nap`/`wake` stay macOS-only until there is a cheap busy-orphan CPU signal on
+Windows — AgentNap refuses loudly rather than guessing quietly. Vote for
+full Windows on the waitlist issue.
+
+### How do I know it's working? — receipts
+
+Every applied reap is logged to `~/.agentnap/ledger.jsonl`:
+
+```
+$ agentnap stats
+AgentNap receipts since 2026-07-07:
+  4.2 GB reclaimed  ·  37 orphaned processes reaped  ·  9 cleanups
+```
 
 ## License
 

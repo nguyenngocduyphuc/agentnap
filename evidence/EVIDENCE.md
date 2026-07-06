@@ -20,9 +20,11 @@ work), then verifies:
 
 Captured run: [`experiment_run_2026-07-06.txt`](experiment_run_2026-07-06.txt).
 
-Since v0.4 this experiment also runs in CI on GitHub's clean `macos-latest`
-runners on every push — verification on independent infrastructure, not just
-the author's machine:
+Since v0.4 this experiment also runs in CI on GitHub's clean runners on
+every push — verification on independent infrastructure, not just the
+author's machine. Since v0.5 the matrix covers **both `macos-latest` and
+`windows-latest`**, so the Windows beta's detection/reap/non-disruption
+claims are proven on real Windows before every release:
 [actions/workflows/test.yml](https://github.com/nguyenngocduyphuc/agentnap/actions/workflows/test.yml).
 
 ## Layer 3 — Independent safety audit (external model)
@@ -66,4 +68,6 @@ sessions idle 47–90 h holding ~1.7 GB.
 - Won't catch leaks *inside* a live process (e.g. one node process growing to
   108 GB) — that's the vendor's bug; AgentNap's advisor will still name the
   culprit.
-- macOS only for now.
+- Windows is beta: no daemon (no cheap per-process CPU signal to protect
+  busy orphans yet), pcpu reads 0.0, GUI detection relies on protect
+  patterns. Manual commands are dry-run-first by design.
