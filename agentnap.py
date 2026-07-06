@@ -2,22 +2,26 @@
 """AgentNap — App Nap for your AI agents.
 
 Reclaims RAM eaten by orphaned AI-agent processes (Claude Code, Codex,
-Cursor helpers, MCP servers, headless Chrome, Playwright) on macOS.
+Cursor helpers, MCP servers, headless Chrome, Playwright) on macOS —
+plus a Windows beta (advise/status/reap; daemon and nap are macOS-only).
 
 Safe by design:
   - only touches processes matching known agent patterns
-  - only orphans (PPID=1) or, with --nap, idle sessions (SIGSTOP, reversible)
-  - graceful reap: SIGTERM -> grace wait -> SIGKILL
+  - only orphans (parent already dead) or, with --nap, idle sessions
+    (SIGSTOP, reversible)
+  - graceful reap: SIGTERM -> grace wait -> SIGKILL (taskkill on Windows)
   - dry-run by default; nothing dies without --apply
 
 Usage:
   agentnap status            # per-agent RAM attribution table
   agentnap advise            # plain-language diagnosis + ranked advice
+  agentnap advise --ai       # + personalized plan from your own LLM key
   agentnap reap              # show what would be reaped (dry-run)
   agentnap reap --apply      # actually reap orphans
+  agentnap stats             # total RAM reclaimed so far (the receipts)
   agentnap daemon            # loop: reap orphans + advise on memory pressure
-  agentnap nap <pid>         # SIGSTOP an idle agent (experimental)
-  agentnap wake <pid>        # SIGCONT it back
+  agentnap nap <pid>...      # SIGSTOP idle agents (experimental)
+  agentnap wake <pid>...     # SIGCONT them back
 
 Guarantee: AgentNap never kills active work. Automatic action is limited to
 orphans (parent already dead). Everything else is advice, decided by you.
@@ -25,13 +29,16 @@ orphans (parent already dead). Everything else is advice, decided by you.
 
 import json
 import os
+import platform
 import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-# ponytail: stdlib only — no psutil. `ps` output is the portable macOS truth.
+# ponytail: stdlib only — no psutil. `ps` / PowerShell CIM are the truth.
+
+IS_WIN = platform.system() == "Windows"
 
 DEFAULT_CONFIG = {
     # substring patterns that mark a process as an AI-agent process
@@ -61,6 +68,7 @@ DEFAULT_CONFIG = {
 }
 
 CONFIG_PATH = Path.home() / ".config" / "agentnap" / "config.json"
+LEDGER_PATH = Path.home() / ".agentnap" / "ledger.jsonl"
 
 
 def load_config() -> dict:
@@ -71,7 +79,11 @@ def load_config() -> dict:
 
 
 def ps_snapshot() -> list[dict]:
-    """All user processes: pid, ppid, pgid, rss_mb, cpu%, etime_s, command."""
+    """All user processes: pid, ppid, pgid, rss_mb, cpu%, age_s, command."""
+    return _ps_windows() if IS_WIN else _ps_unix()
+
+
+def _ps_unix() -> list[dict]:
     out = subprocess.run(
         ["ps", "-axo", "pid=,ppid=,pgid=,rss=,%cpu=,etime=,command="],
         capture_output=True, text=True, check=True,
@@ -92,6 +104,37 @@ def ps_snapshot() -> list[dict]:
     return procs
 
 
+def _ps_windows() -> list[dict]:
+    out = subprocess.run(
+        ["powershell", "-NoProfile", "-Command",
+         "Get-CimInstance Win32_Process | Select-Object ProcessId,"
+         "ParentProcessId,WorkingSetSize,CommandLine,CreationDate | "
+         "ConvertTo-Json -Compress"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    now = time.time()
+    procs = []
+    for it in json.loads(out):
+        cd = it.get("CreationDate") or ""   # "/Date(1751852117490)/" (ms)
+        age = 0
+        if "(" in cd:
+            try:
+                age = max(0, int(now - int(cd.split("(")[1].split(")")[0]) / 1000))
+            except ValueError:
+                pass
+        procs.append({
+            "pid": it["ProcessId"], "ppid": it.get("ParentProcessId") or 0,
+            "pgid": 0,
+            "rss_mb": (it.get("WorkingSetSize") or 0) / 1048576,
+            # ponytail: no cheap per-proc CPU% on Windows; 0.0 means the
+            # busy-orphan guard is a no-op there — beta ships without daemon
+            "pcpu": 0.0,
+            "age_s": age,
+            "command": it.get("CommandLine") or "",
+        })
+    return procs
+
+
 def _parse_etime(etime: str) -> int:
     """ps etime: [[dd-]hh:]mm:ss -> seconds."""
     days = 0
@@ -106,7 +149,21 @@ def _parse_etime(etime: str) -> int:
 
 
 def memory_pressure_level() -> int:
-    """1=normal, 2=warning, 4=critical (macOS kern.memorystatus)."""
+    """1=normal, 2=warning, 4=critical."""
+    if IS_WIN:
+        try:
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-CimInstance Win32_OperatingSystem | Select-Object "
+                 "FreePhysicalMemory,TotalVisibleMemorySize | "
+                 "ConvertTo-Json -Compress"],
+                capture_output=True, text=True, check=True,
+            ).stdout
+            d = json.loads(out)
+            free_pct = 100 * d["FreePhysicalMemory"] / d["TotalVisibleMemorySize"]
+            return 1 if free_pct > 15 else 2 if free_pct > 8 else 4
+        except Exception:
+            return 1
     try:
         out = subprocess.run(
             ["sysctl", "-n", "kern.memorystatus_vm_pressure_level"],
@@ -118,6 +175,17 @@ def memory_pressure_level() -> int:
 
 
 def swap_used_gb() -> float:
+    if IS_WIN:
+        try:
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "(Get-CimInstance Win32_PageFileUsage | "
+                 "Measure-Object -Sum CurrentUsage).Sum"],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+            return float(out or 0) / 1024
+        except Exception:
+            return 0.0
     try:
         out = subprocess.run(
             ["sysctl", "-n", "vm.swapusage"],
@@ -130,7 +198,10 @@ def swap_used_gb() -> float:
 
 
 def notify(message: str) -> None:
-    """Native macOS notification. ponytail: osascript, no frameworks."""
+    """Native macOS notification. ponytail: osascript, no frameworks.
+    No-op on Windows: the daemon (its only caller) is macOS-only for now."""
+    if IS_WIN:
+        return
     subprocess.run(
         ["osascript", "-e",
          f'display notification "{message}" with title "AgentNap 😴"'],
@@ -142,6 +213,8 @@ def is_gui_app(pid: int) -> bool:
     """Ask LaunchServices whether pid is a real GUI app (never reap those).
     A substring test on '.app' is wrong: every framework Python on macOS
     runs as .../Python.app/Contents/MacOS/Python yet is a CLI process."""
+    if IS_WIN:
+        return False  # covered by protect_patterns + dry-run-default in beta
     out = subprocess.run(
         ["lsappinfo", "info", "-only", "bundleid", str(pid)],
         capture_output=True, text=True,
@@ -273,11 +346,19 @@ def match_agents(procs: list[dict], cfg: dict) -> list[dict]:
     return hits
 
 
+def _is_orphan(p: dict, alive_pids: set) -> bool:
+    # macOS/Linux: orphans reparent to PID 1. Windows: no reparenting —
+    # the recorded parent PID simply no longer exists.
+    return (p["ppid"] not in alive_pids) if IS_WIN else (p["ppid"] == 1)
+
+
 def find_orphans(cfg: dict, procs: list[dict] | None = None) -> list[dict]:
-    agents = match_agents(procs if procs is not None else ps_snapshot(), cfg)
+    procs = procs if procs is not None else ps_snapshot()
+    alive = {p["pid"] for p in procs}
+    agents = match_agents(procs, cfg)
     return [
         p for p in agents
-        if p["ppid"] == 1
+        if _is_orphan(p, alive)
         and p["age_s"] >= cfg["min_age_seconds"]
         and p["rss_mb"] >= cfg["min_rss_mb"]
         # a busy orphan may be nohup'd real work (audit finding #1)
@@ -301,42 +382,92 @@ def reap(procs: list[dict], grace: int, apply: bool) -> float:
             _terminate(p["pid"], grace)
     verb = "Reclaimed" if apply else "Would reclaim"
     print(f"{verb} ~{total:.0f} MB from {len(procs)} orphan(s).")
-    if not apply:
+    if apply:
+        _log_reclaim(total, len(procs))
+    else:
         print("Run again with --apply to actually reap.")
     return total
 
 
-def _terminate(pid: int, grace: int) -> None:
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
+def _log_reclaim(mb: float, count: int) -> None:
+    """Append to the receipts ledger (~/.agentnap/ledger.jsonl)."""
+    LEDGER_PATH.parent.mkdir(exist_ok=True)
+    with open(LEDGER_PATH, "a") as f:
+        f.write(json.dumps(
+            {"ts": int(time.time()), "mb": round(mb), "procs": count}) + "\n")
+
+
+def cmd_stats() -> None:
+    if not LEDGER_PATH.exists():
+        print("No reaps recorded yet. Run `agentnap reap --apply` or the "
+              "daemon, then come back for your receipts.")
         return
-    deadline = time.time() + grace
-    while time.time() < deadline:
+    rows = [json.loads(line) for line in LEDGER_PATH.read_text().splitlines()
+            if line.strip()]
+    mb = sum(r["mb"] for r in rows)
+    procs = sum(r["procs"] for r in rows)
+    since = time.strftime("%Y-%m-%d", time.localtime(rows[0]["ts"]))
+    print(f"AgentNap receipts since {since}:")
+    print(f"  {mb / 1024:.1f} GB reclaimed  ·  {procs} orphaned processes "
+          f"reaped  ·  {len(rows)} cleanups")
+    last = rows[-1]
+    print(f"  last: {time.strftime('%Y-%m-%d %H:%M', time.localtime(last['ts']))}"
+          f" ({last['mb']} MB, {last['procs']} procs)")
+
+
+def _alive(pid: int) -> bool:
+    if IS_WIN:
+        out = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+            capture_output=True, text=True,
+        ).stdout
+        return str(pid) in out
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
+
+def _terminate(pid: int, grace: int) -> None:
+    if IS_WIN:
+        # taskkill without /F asks nicely (WM_CLOSE); /F is the hammer
+        subprocess.run(["taskkill", "/PID", str(pid)], capture_output=True)
+    else:
         try:
-            os.kill(pid, 0)
+            os.kill(pid, signal.SIGTERM)
         except ProcessLookupError:
             return
+    deadline = time.time() + grace
+    while time.time() < deadline:
+        if not _alive(pid):
+            return
         time.sleep(0.25)
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+    if IS_WIN:
+        subprocess.run(["taskkill", "/F", "/PID", str(pid)],
+                       capture_output=True)
+    else:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 def cmd_status(cfg: dict) -> None:
-    agents = match_agents(ps_snapshot(), cfg)
+    procs = ps_snapshot()
+    alive = {p["pid"] for p in procs}
+    agents = match_agents(procs, cfg)
     if not agents:
         print("No agent processes found.")
         return
     groups: dict[str, dict] = {}
     for p in agents:
         # ponytail: first token basename is a good-enough group key
-        key = os.path.basename(p["command"].split()[0])
+        key = os.path.basename(p["command"].split()[0]) if p["command"] else "?"
         g = groups.setdefault(key, {"rss": 0.0, "n": 0, "orphans": 0})
         g["rss"] += p["rss_mb"]
         g["n"] += 1
-        g["orphans"] += p["ppid"] == 1
+        g["orphans"] += _is_orphan(p, alive)
     total = sum(g["rss"] for g in groups.values())
     level = {1: "normal", 2: "WARNING", 4: "CRITICAL"}.get(
         memory_pressure_level(), "?")
@@ -350,6 +481,12 @@ def cmd_status(cfg: dict) -> None:
 
 
 def cmd_daemon(cfg: dict) -> None:
+    if IS_WIN:
+        print("The daemon is macOS-only while Windows support is in beta "
+              "(no cheap per-process CPU signal to protect busy orphans "
+              "yet). Run `agentnap advise` / `agentnap reap` manually — "
+              "dry-run first, always.")
+        sys.exit(1)
     print(f"AgentNap daemon: scan every {cfg['daemon_interval']}s, "
           f"act at pressure >= {cfg['daemon_pressure_level']}")
     last_notify = 0.0
@@ -383,9 +520,14 @@ def main() -> None:
             print(ai_advise(report, cfg))
     elif cmd == "reap":
         reap(find_orphans(cfg), cfg["grace_seconds"], apply="--apply" in args)
+    elif cmd == "stats":
+        cmd_stats()
     elif cmd == "daemon":
         cmd_daemon(cfg)
     elif cmd in ("nap", "wake") and len(args) > 1:
+        if IS_WIN:
+            print("nap/wake need SIGSTOP/SIGCONT — macOS-only for now.")
+            sys.exit(1)
         sig = signal.SIGSTOP if cmd == "nap" else signal.SIGCONT
         for pid in args[1:]:
             os.kill(int(pid), sig)

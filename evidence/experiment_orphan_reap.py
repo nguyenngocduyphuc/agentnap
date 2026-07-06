@@ -16,6 +16,7 @@ Run: python3 evidence/experiment_orphan_reap.py
 import os
 import subprocess
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -28,7 +29,7 @@ MB_EACH = 100
 # (exec -a) does NOT survive on macOS: framework pythons re-exec as
 # .../Python.app/Contents/MacOS/Python. A script file with a telling name
 # is how real MCP servers look in ps anyway (node .../mcp-server-x/index.js).
-DUMMY_SCRIPT = "/tmp/mcp-server-dummy.py"
+DUMMY_SCRIPT = os.path.join(tempfile.gettempdir(), "mcp-server-dummy.py")
 DUMMY_CODE = (
     f"import time\n"
     f"x = bytearray({MB_EACH} * 1024 * 1024)\n"
@@ -38,10 +39,20 @@ DUMMY_CODE = (
 
 
 def spawn_orphan() -> None:
-    # parent shell exits immediately -> child reparents to launchd (PPID=1)
-    subprocess.Popen(
-        ["/bin/sh", "-c", f"python3 {DUMMY_SCRIPT} &"],
-    ).wait()
+    if agentnap.IS_WIN:
+        # short-lived parent spawns a DETACHED grandchild, then exits ->
+        # the grandchild's recorded parent PID no longer exists
+        subprocess.Popen(
+            [sys.executable, "-c",
+             "import subprocess, sys; subprocess.Popen("
+             f"[sys.executable, r'{DUMMY_SCRIPT}'], "
+             "creationflags=0x00000008)"],  # DETACHED_PROCESS
+        ).wait()
+    else:
+        # parent shell exits immediately -> child reparents to launchd
+        subprocess.Popen(
+            ["/bin/sh", "-c", f"{sys.executable} {DUMMY_SCRIPT} &"],
+        ).wait()
 
 
 def main() -> None:
@@ -56,9 +67,9 @@ def main() -> None:
           f"~{MB_EACH} MB each ==")
     for _ in range(N_ORPHANS):
         spawn_orphan()
-    active = subprocess.Popen(  # stays our child: PPID != 1
-        ["python3", DUMMY_SCRIPT])
-    time.sleep(5)  # let allocations settle
+    active = subprocess.Popen(  # stays our child: parent (us) is alive
+        [sys.executable, DUMMY_SCRIPT])
+    time.sleep(8)  # let allocations settle (CI runners are slow)
 
     def dummies():
         return [p for p in agentnap.ps_snapshot()

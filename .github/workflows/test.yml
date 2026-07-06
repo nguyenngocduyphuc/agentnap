@@ -6,10 +6,17 @@ on:
 
 jobs:
   test:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Unit self-checks
-        run: python3 test_agentnap.py
+        run: python test_agentnap.py
       - name: E2E orphan-reap experiment
-        run: python3 evidence/experiment_orphan_reap.py
+        run: python evidence/experiment_orphan_reap.py
