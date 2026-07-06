@@ -65,9 +65,11 @@ if asked.
 
 ## Assets needed before launch
 
-- [ ] GitHub repo public under founder's account
-- [ ] Screenshot/GIF of `agentnap advise` (real output, blur nothing — it's
-      the proof)
-- [ ] Waitlist link live (Gumroad or Tally)
-- [ ] README badges: license, platform, "made by a pharma-GxP automation
-      engineer who runs 9 agents in parallel" (credibility + story)
+- [x] GitHub repo public: https://github.com/nguyenngocduyphuc/agentnap
+- [x] Release v0.4.0 published with verified-evidence notes
+- [x] CI green on clean macOS runners (tests badge in README)
+- [x] Waitlist live: pinned issue #1 (👍 = signup; zero cost, public
+      social proof). Gumroad/Tally can replace it when Pro is near.
+- [x] README badges: tests, license, platform, zero-deps
+- [ ] Screenshot/GIF of `agentnap advise` (founder: 1 terminal screenshot)
+- [ ] Founder posts Show HN + r/ClaudeAI (drafts above; personal accounts)
