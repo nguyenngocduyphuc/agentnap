@@ -32,6 +32,7 @@ from __future__ import annotations  # 3.9 compat: defers `X | None` evaluation
 import json
 import os
 import platform
+import shutil
 import signal
 import subprocess
 import sys
@@ -76,6 +77,7 @@ DEFAULT_CONFIG = {
 
 CONFIG_PATH = Path.home() / ".config" / "agentnap" / "config.json"
 LEDGER_PATH = Path.home() / ".agentnap" / "ledger.jsonl"
+PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / "com.agentnap.daemon.plist"
 
 
 def load_config() -> dict:
@@ -265,7 +267,7 @@ def build_advice(cfg: dict) -> tuple[str, str]:
 
     orphan_mb = sum(p["rss_mb"] for p in orphans)
     if orphans:
-        lines.append(f"Safe now (zero disruption — these are already dead):")
+        lines.append("Safe now (zero disruption — these are already dead):")
         lines.append(f"  ✓ Reclaim ~{orphan_mb:.0f} MB from {len(orphans)} "
                      f"orphaned process(es)  →  agentnap reap --apply")
     else:
@@ -518,6 +520,64 @@ def cmd_daemon(cfg: dict) -> None:
         time.sleep(cfg["daemon_interval"])
 
 
+def _daemon_executable() -> list[str]:
+    """ProgramArguments prefix for the launchd plist (no trailing 'daemon').
+
+    Prefer the pipx/brew wrapper when on PATH; fall back to this interpreter
+    + this script so a source checkout still works.
+    """
+    found = shutil.which("agentnap")
+    if found:
+        return [found]
+    return [sys.executable, os.path.abspath(__file__)]
+
+
+def _daemon_plist(program_args: list[str]) -> str:
+    """launchd plist XML for com.agentnap.daemon (template matches install.sh)."""
+    args_xml = "\n".join(f"    <string>{a}</string>" for a in program_args)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"\n'
+        '  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+        '<plist version="1.0">\n'
+        "<dict>\n"
+        "  <key>Label</key><string>com.agentnap.daemon</string>\n"
+        "  <key>ProgramArguments</key>\n"
+        "  <array>\n"
+        f"{args_xml}\n"
+        "  </array>\n"
+        "  <key>RunAtLoad</key><true/>\n"
+        "  <key>KeepAlive</key><true/>\n"
+        "  <key>ProcessType</key><string>Background</string>\n"
+        "  <key>StandardOutPath</key><string>/tmp/agentnap.log</string>\n"
+        "  <key>StandardErrorPath</key><string>/tmp/agentnap.log</string>\n"
+        "</dict>\n"
+        "</plist>\n"
+    )
+
+
+def cmd_daemon_install() -> None:
+    if IS_WIN:
+        print("daemon install is macOS-only for now")
+        sys.exit(1)
+    PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PLIST_PATH.write_text(_daemon_plist(_daemon_executable() + ["daemon"]))
+    subprocess.run(["launchctl", "unload", str(PLIST_PATH)],
+                   capture_output=True)  # ignore errors if not loaded
+    subprocess.run(["launchctl", "load", str(PLIST_PATH)], check=True)
+    print("✓ daemon loaded (log: /tmp/agentnap.log)")
+
+
+def cmd_daemon_uninstall() -> None:
+    if not PLIST_PATH.exists():
+        print("not installed")
+        return
+    subprocess.run(["launchctl", "unload", str(PLIST_PATH)],
+                   capture_output=True)  # ignore errors
+    PLIST_PATH.unlink(missing_ok=True)
+    print("✓ daemon uninstalled")
+
+
 def main() -> None:
     args = sys.argv[1:]
     if "--version" in args:
@@ -538,7 +598,13 @@ def main() -> None:
     elif cmd == "stats":
         cmd_stats()
     elif cmd == "daemon":
-        cmd_daemon(cfg)
+        sub = args[1] if len(args) > 1 else ""
+        if sub == "install":
+            cmd_daemon_install()
+        elif sub == "uninstall":
+            cmd_daemon_uninstall()
+        else:
+            cmd_daemon(cfg)
     elif cmd in ("nap", "wake") and len(args) > 1:
         if IS_WIN:
             print("nap/wake need SIGSTOP/SIGCONT — macOS-only for now.")

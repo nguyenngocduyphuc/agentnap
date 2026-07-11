@@ -48,6 +48,13 @@ def demo():
 
     snap = agentnap.ps_snapshot()
     assert len(snap) > 10 and all(p["pid"] > 0 for p in snap[:5])
+
+    # daemon install: pure string check (never call launchctl)
+    xml = agentnap._daemon_plist(["/usr/bin/python3", "/tmp/agentnap.py", "daemon"])
+    assert "com.agentnap.daemon" in xml
+    assert "ProgramArguments" in xml
+    assert "<string>daemon</string>" in xml
+
     print("all checks passed")
 
 

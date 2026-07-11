@@ -14,6 +14,27 @@
 4. **Content flywheel** — PLAYBOOK.md chapters as dev.to/blog posts ranking
    for "claude code memory leak" queries (high-intent, growing).
 
+## Market research 2026-07-11 (grounded, run
+`artifacts/dispatch/research_1783785827129418000` in the workspace repo)
+
+- **#1 paying-user ask = menu-bar GUI with 1-click reap** — validates the Pro
+  pitch exactly as written above. Do NOT build it before the waitlist signal.
+- **Competitors are all free scripts, none commercial**: cc-reaper (PGID
+  kill + 30s janitor daemon), devclean (PPID=1 dev-daemon cleaner, also
+  Gradle/Flutter), claude-code-cleaner + CC-Cleaner (disk/cache, not RAM).
+  None has: advisor UX, independent safety audit, receipts ledger, CI-proven
+  non-disruption. That's the moat — lead with it.
+- **Channels ranked**: Homebrew tap = professionalism signal + frictionless
+  (done in v1.0); r/ClaudeAI = highest-intent organic; Show HN = traffic
+  spike, rewards technical transparency, penalizes marketing copy; Setapp =
+  best recurring revenue for daemon utilities (post-Pro); Gumroad/
+  LemonSqueezy = VAT handled, pair with offline Ed25519 license keys.
+- **Failed approaches to never repeat**: naive `pkill -f node` (kills user
+  browsers), deleting `~/.claude/` while locked (corrupts DBs), NPM distribution.
+- **v1.0 gaps closed tonight**: brew tap + pipx + `daemon install`.
+  Deferred deliberately: Windows nap/wake (needs NtSuspendProcess), license
+  validator (YAGNI until waitlist), menu-bar app (Pro, after signal).
+
 ## Show HN draft
 
 **Title:** Show HN: AgentNap – reclaim the RAM your AI coding agents leak on
@@ -71,5 +92,7 @@ if asked.
 - [x] Waitlist live: pinned issue #1 (👍 = signup; zero cost, public
       social proof). Gumroad/Tally can replace it when Pro is near.
 - [x] README badges: tests, license, platform, zero-deps
-- [ ] Screenshot/GIF of `agentnap advise` (founder: 1 terminal screenshot)
+- [x] Screenshot of `agentnap advise` — real capture 2026-07-11, rendered to
+      SVG in README hero (`launch/assets/advise.svg`, regen via
+      `python3 launch/make_screenshot.py`)
 - [ ] Founder posts Show HN + r/ClaudeAI (drafts above; personal accounts)

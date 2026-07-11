@@ -49,6 +49,8 @@ AgentNap never kills active work. Automatic = orphans only; the rest is advice.
 - **`daemon`** — background watchdog. When macOS reports elevated memory
   pressure it auto-reaps orphans (the only automatic action) and sends one
   native notification with advice — max one per 30 min, no nagging.
+  Install as a background service with `agentnap daemon install`
+  (remove: `agentnap daemon uninstall`).
 - **`nap` / `wake`** — SIGSTOP idle agents so macOS can compress/swap their
   pages, SIGCONT to resume. Fully reversible. (experimental)
 - **`advise --ai`** — optional: sends the diagnostic report to *your* LLM for
@@ -75,6 +77,19 @@ a repeatable verification experiment.
 
 New to the problem? Read the [AI-Agent RAM Playbook](PLAYBOOK.md) — five
 habits that prevent the mess in the first place.
+
+## Alternatives
+
+Good free tools exist — pick what fits:
+[cc-reaper](https://github.com/theQuert/cc-reaper) (PGID-tree kill + a 30 s
+janitor daemon), [devclean](https://github.com/ImL1s/devclean) (orphaned dev
+daemons beyond AI agents — Gradle, Flutter, simulators),
+[claude-code-cleaner](https://github.com/GarrickZ2/claude-code-cleaner) and
+[CC-Cleaner](https://github.com/tk-425/CC-Cleaner) (disk caches in
+`~/.claude/`, not RAM). AgentNap's focus is different: a plain-language
+**advisor**, an independently audited **non-disruption guarantee** (busy
+orphans are spared, GUI apps verified via LaunchServices), and a **receipts
+ledger** so you can see what it actually saved you.
 
 ## Why it's safe
 

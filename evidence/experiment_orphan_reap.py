@@ -79,7 +79,7 @@ def main() -> None:
     swap_before = agentnap.swap_used_gb()
     found = agentnap.find_orphans(cfg)
     found_rss = sum(p["rss_mb"] for p in found)
-    print(f"\n== C1 DETECTION ==")
+    print("\n== C1 DETECTION ==")
     print(f"spawned orphans : {N_ORPHANS}")
     print(f"detected orphans: {len(found)}  (total RSS {found_rss:.0f} MB)")
     print(f"active child pid {active.pid} in orphan list: "
@@ -87,18 +87,18 @@ def main() -> None:
     assert len(found) == N_ORPHANS, "detection count mismatch"
     assert all(p["pid"] != active.pid for p in found), "C3 VIOLATED"
 
-    print(f"\n== C2 REAP ==")
+    print("\n== C2 REAP ==")
     agentnap.reap(found, grace=cfg["grace_seconds"], apply=True)
     time.sleep(2)
     survivors = dummies()
     active_alive = active.poll() is None
     print(f"orphan survivors after reap: {len(survivors)} (expect 0)")
-    print(f"\n== C3 NON-DISRUPTION ==")
+    print("\n== C3 NON-DISRUPTION ==")
     print(f"active child alive after reap: {active_alive} (expect True)")
     assert not survivors, "orphans survived"
     assert active_alive, "C3 VIOLATED: active work was killed"
 
-    print(f"\n== RESULT ==")
+    print("\n== RESULT ==")
     print(f"RSS held by orphans (reclaimed on kill): {found_rss:.0f} MB")
     print(f"swap before/after: {swap_before:.2f} / "
           f"{agentnap.swap_used_gb():.2f} GB")
