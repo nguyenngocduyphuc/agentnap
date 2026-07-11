@@ -1,0 +1,23 @@
+#!/bin/bash
+# Blocks `git push` if the test suite fails on the oldest supported
+# interpreter (stock macOS /usr/bin/python3, no Homebrew) or the default
+# `python3` on PATH. This is the exact gap that let a 3.10-only syntax
+# ship and crash on every fresh Mac: CI caught it AFTER push, this hook
+# catches it BEFORE.
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+run() {
+  local py="$1"
+  [ -x "$(command -v "$py")" ] || return 0
+  echo "pre-push: testing with $py ($("$py" --version 2>&1))"
+  "$py" test_agentnap.py || {
+    echo "pre-push: BLOCKED — test_agentnap.py failed on $py"
+    echo "  fix it, or bypass deliberately with: git push --no-verify"
+    exit 1
+  }
+}
+
+run /usr/bin/python3   # the ground truth: what a fresh Mac actually has
+run python3            # whatever the developer's PATH resolves to
+echo "pre-push: all interpreters passed"

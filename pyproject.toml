@@ -1,0 +1,6 @@
+[project]
+name = "agentnap"
+requires-python = ">=3.9"   # stock macOS /usr/bin/python3 — the whole point
+
+[tool.ruff]
+target-version = "py39"    # flags syntax the minimum supported interpreter can't run

@@ -91,7 +91,10 @@ git clone https://github.com/<you>/agentnap && cd agentnap
 ./install.sh        # symlinks agentnap + optional launchd daemon
 ```
 
-Requires macOS + Python 3.9+ (system Python works). Zero dependencies.
+Requires macOS or Windows (beta) + Python 3.9+ — **stock Apple system Python
+works, no Homebrew needed.** Zero dependencies. This exact contract is
+enforced by CI on every push (`.9` and `.12`, both OSes) and by a local
+pre-push hook — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Configure
 
