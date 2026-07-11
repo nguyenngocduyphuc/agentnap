@@ -10,12 +10,16 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest, windows-latest]
+        # 3.9 = stock Apple system python3 (/usr/bin/python3, no Homebrew) —
+        # the exact interpreter most macOS users have with zero setup.
+        # Missing this let a `list[dict] | None` (3.10+ syntax) crash ship.
+        python-version: ["3.9", "3.12"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
       - name: Unit self-checks
         run: python test_agentnap.py
       - name: E2E orphan-reap experiment

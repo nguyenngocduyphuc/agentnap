@@ -27,6 +27,8 @@ Guarantee: AgentNap never kills active work. Automatic action is limited to
 orphans (parent already dead). Everything else is advice, decided by you.
 """
 
+from __future__ import annotations  # 3.9 compat: defers `X | None` evaluation
+
 import json
 import os
 import platform
