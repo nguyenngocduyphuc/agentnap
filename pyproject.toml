@@ -1,6 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "agentnap"
+version = "1.0.0"
+description = "App Nap for your AI agents — reclaim the RAM AI coding agents leak"
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.9"   # stock macOS /usr/bin/python3 — the whole point
+keywords = ["agentnap", "ram", "orphan", "cli", "macos", "windows", "ai-agents"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/nguyenngocduyphuc/agentnap"
+Issues = "https://github.com/nguyenngocduyphuc/agentnap/issues"
+
+[project.scripts]
+agentnap = "agentnap:main"
+
+[tool.setuptools]
+py-modules = ["agentnap"]
 
 [tool.ruff]
 target-version = "py39"    # flags syntax the minimum supported interpreter can't run

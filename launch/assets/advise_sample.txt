@@ -1,0 +1,14 @@
+🩺 AgentNap Advisor — 23:05
+
+Memory pressure: normal ✅   swap: 17.7 GB   agent RAM: 8.6 GB
+
+No orphaned agent processes — nothing to auto-clean.
+
+Advisory (your call — may interrupt a session you still want):
+  • claude pid=44242 holds 622 MB, idle 38h+ — close its tab, or `agentnap nap 44242` (reversible)
+  • claude pid=37929 holds 269 MB, idle 64h+ — close its tab, or `agentnap nap 37929` (reversible)
+  • claude pid=24853 holds 239 MB, idle 39h+ — close its tab, or `agentnap nap 24853` (reversible)
+  • claude pid=19624 holds 221 MB, idle 16h+ — close its tab, or `agentnap nap 19624` (reversible)
+  • claude pid=90419 holds 136 MB, idle 8h+ — close its tab, or `agentnap nap 90419` (reversible)
+
+AgentNap never kills active work. Automatic = orphans only; the rest is advice.

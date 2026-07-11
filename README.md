@@ -8,6 +8,8 @@
 **App Nap for your AI agents.** Reclaim the gigabytes of RAM that Claude Code,
 Codex, Cursor, MCP servers, and headless Chrome quietly leak on your Mac.
 
+![agentnap advise — real output](launch/assets/advise.svg)
+
 ## The problem
 
 AI coding agents spawn subagents, MCP servers, and browser daemons. When a
@@ -86,8 +88,22 @@ habits that prevent the mess in the first place.
 
 ## Install
 
+Homebrew (recommended on macOS):
+
 ```bash
-git clone https://github.com/<you>/agentnap && cd agentnap
+brew install nguyenngocduyphuc/agentnap/agentnap
+```
+
+pipx (macOS/Windows):
+
+```bash
+pipx install git+https://github.com/nguyenngocduyphuc/agentnap
+```
+
+Or from source:
+
+```bash
+git clone https://github.com/nguyenngocduyphuc/agentnap && cd agentnap
 ./install.sh        # symlinks agentnap + optional launchd daemon
 ```
 

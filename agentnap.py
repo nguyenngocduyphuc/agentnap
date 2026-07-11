@@ -45,6 +45,8 @@ if IS_WIN:  # legacy consoles default to cp1252 and choke on ✓/emoji
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+__version__ = "1.0.0"
+
 DEFAULT_CONFIG = {
     # substring patterns that mark a process as an AI-agent process
     "agent_patterns": [
@@ -517,8 +519,11 @@ def cmd_daemon(cfg: dict) -> None:
 
 
 def main() -> None:
-    cfg = load_config()
     args = sys.argv[1:]
+    if "--version" in args:
+        print(f"agentnap {__version__}")
+        return
+    cfg = load_config()
     cmd = args[0] if args else "status"
     if cmd == "status":
         cmd_status(cfg)
